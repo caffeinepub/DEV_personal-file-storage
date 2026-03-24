@@ -41023,55 +41023,35 @@ function InternetIdentityProvider({
   });
 }
 const ACTOR_QUERY_KEY = "actor";
-function withTimeout(promise, ms) {
-  return Promise.race([
-    promise,
-    new Promise(
-      (_2, reject) => setTimeout(() => reject(new Error(`Timed out after ${ms}ms`)), ms)
-    )
-  ]);
-}
 function useActor() {
   const { identity } = useInternetIdentity();
   const queryClient2 = useQueryClient();
+  const prevActorRef = reactExports.useRef(null);
   const actorQuery = useQuery({
     queryKey: [ACTOR_QUERY_KEY, identity == null ? void 0 : identity.getPrincipal().toString()],
     queryFn: async () => {
       const isAuthenticated = !!identity;
       if (!isAuthenticated) {
-        return await withTimeout(createActorWithConfig(), 1e4);
+        return await createActorWithConfig();
       }
       const actorOptions = {
         agentOptions: {
           identity
         }
       };
-      const actor = await withTimeout(
-        createActorWithConfig(actorOptions),
-        1e4
-      );
+      const actor = await createActorWithConfig(actorOptions);
       const adminToken = getSecretParameter("caffeineAdminToken") || "";
-      await withTimeout(
-        actor._initializeAccessControlWithSecret(adminToken),
-        1e4
-      );
+      await actor._initializeAccessControlWithSecret(adminToken);
       return actor;
     },
     staleTime: Number.POSITIVE_INFINITY,
-    enabled: true,
-    retry: false
+    enabled: true
   });
   reactExports.useEffect(() => {
-    if (actorQuery.data) {
+    if (actorQuery.data && actorQuery.data !== prevActorRef.current) {
+      prevActorRef.current = actorQuery.data;
       queryClient2.invalidateQueries({
-        predicate: (query) => {
-          return !query.queryKey.includes(ACTOR_QUERY_KEY);
-        }
-      });
-      queryClient2.refetchQueries({
-        predicate: (query) => {
-          return !query.queryKey.includes(ACTOR_QUERY_KEY);
-        }
+        predicate: (query) => !query.queryKey.includes(ACTOR_QUERY_KEY)
       });
     }
   }, [actorQuery.data, queryClient2]);
@@ -41080,6 +41060,7 @@ function useActor() {
     isFetching: actorQuery.isFetching
   };
 }
+const STALE_TIME = 3e4;
 function useGetMyFiles() {
   const { actor, isFetching } = useActor();
   return useQuery({
@@ -41088,7 +41069,8 @@ function useGetMyFiles() {
       if (!actor) return [];
       return actor.getMyFiles();
     },
-    enabled: !!actor && !isFetching
+    enabled: !!actor && !isFetching,
+    staleTime: STALE_TIME
   });
 }
 function useGetStorageInfo() {
@@ -41103,7 +41085,8 @@ function useGetStorageInfo() {
       ]);
       return { used, remaining };
     },
-    enabled: !!actor && !isFetching
+    enabled: !!actor && !isFetching,
+    staleTime: STALE_TIME
   });
 }
 function formatBytes(bytes) {

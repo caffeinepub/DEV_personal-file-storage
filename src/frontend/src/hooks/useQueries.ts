@@ -2,6 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import type { FileRecord } from "../backend";
 import { useActor } from "./useActor";
 
+const STALE_TIME = 30_000;
+
 export function useGetMyFiles() {
   const { actor, isFetching } = useActor();
   return useQuery<FileRecord[]>({
@@ -11,6 +13,7 @@ export function useGetMyFiles() {
       return actor.getMyFiles();
     },
     enabled: !!actor && !isFetching,
+    staleTime: STALE_TIME,
   });
 }
 
@@ -27,5 +30,6 @@ export function useGetStorageInfo() {
       return { used, remaining };
     },
     enabled: !!actor && !isFetching,
+    staleTime: STALE_TIME,
   });
 }
