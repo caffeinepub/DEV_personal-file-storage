@@ -41023,6 +41023,14 @@ function InternetIdentityProvider({
   });
 }
 const ACTOR_QUERY_KEY = "actor";
+function withTimeout(promise, ms) {
+  return Promise.race([
+    promise,
+    new Promise(
+      (_2, reject) => setTimeout(() => reject(new Error(`Timed out after ${ms}ms`)), ms)
+    )
+  ]);
+}
 function useActor() {
   const { identity } = useInternetIdentity();
   const queryClient2 = useQueryClient();
@@ -41031,19 +41039,22 @@ function useActor() {
     queryFn: async () => {
       const isAuthenticated = !!identity;
       if (!isAuthenticated) {
-        return await createActorWithConfig();
+        return await withTimeout(createActorWithConfig(), 1e4);
       }
       const actorOptions = {
         agentOptions: {
           identity
         }
       };
-      const actor = await createActorWithConfig(actorOptions);
+      const actor = await withTimeout(
+        createActorWithConfig(actorOptions),
+        1e4
+      );
       const adminToken = getSecretParameter("caffeineAdminToken") || "";
-      await Promise.race([
+      await withTimeout(
         actor._initializeAccessControlWithSecret(adminToken),
-        new Promise((resolve) => setTimeout(resolve, 1e4))
-      ]);
+        1e4
+      );
       return actor;
     },
     staleTime: Number.POSITIVE_INFINITY,
@@ -41053,10 +41064,14 @@ function useActor() {
   reactExports.useEffect(() => {
     if (actorQuery.data) {
       queryClient2.invalidateQueries({
-        predicate: (query) => !query.queryKey.includes(ACTOR_QUERY_KEY)
+        predicate: (query) => {
+          return !query.queryKey.includes(ACTOR_QUERY_KEY);
+        }
       });
       queryClient2.refetchQueries({
-        predicate: (query) => !query.queryKey.includes(ACTOR_QUERY_KEY)
+        predicate: (query) => {
+          return !query.queryKey.includes(ACTOR_QUERY_KEY);
+        }
       });
     }
   }, [actorQuery.data, queryClient2]);
@@ -44526,24 +44541,24 @@ function AppContent() {
     queryFn: async () => {
       if (!actor) throw new Error("Actor not available");
       const timeout2 = new Promise(
-        (_2, reject) => setTimeout(() => reject(new Error("Profile fetch timed out")), 15e3)
+        (_2, reject) => setTimeout(() => reject(new Error("Profile fetch timed out")), 1e4)
       );
       return Promise.race([actor.getCallerUserProfile(), timeout2]);
     },
     enabled: !!actor && !actorFetching && isAuthenticated,
     retry: false
   });
-  if (isInitializing) {
+  const isLoading = isInitializing || isAuthenticated && actorFetching && !profileQuery.isFetched || isAuthenticated && !!actor && profileQuery.isLoading && !profileQuery.isError;
+  const showProfileSetup = isAuthenticated && !isLoading && profileQuery.isFetched && !profileQuery.isError && profileQuery.data === null;
+  if (!isAuthenticated && !isInitializing) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(LoginScreen, {});
+  }
+  if (isLoading) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "min-h-screen flex items-center justify-center bg-background", children: /* @__PURE__ */ jsxRuntimeExports.jsx(LoaderCircle, { className: "h-8 w-8 animate-spin text-primary" }) });
   }
   if (!isAuthenticated) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(LoginScreen, {});
   }
-  const isProfileLoading = (actorFetching || profileQuery.isLoading) && !profileQuery.isError;
-  if (isProfileLoading) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "min-h-screen flex items-center justify-center bg-background", children: /* @__PURE__ */ jsxRuntimeExports.jsx(LoaderCircle, { className: "h-8 w-8 animate-spin text-primary" }) });
-  }
-  const showProfileSetup = profileQuery.isFetched && !profileQuery.isError && profileQuery.data === null;
   if (showProfileSetup) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(ProfileSetup, {});
   }

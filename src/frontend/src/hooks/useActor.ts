@@ -6,6 +6,16 @@ import { getSecretParameter } from "../utils/urlParams";
 import { useInternetIdentity } from "./useInternetIdentity";
 
 const ACTOR_QUERY_KEY = "actor";
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`Timed out after ${ms}ms`)), ms),
+    ),
+  ]);
+}
+
 export function useActor() {
   const { identity } = useInternetIdentity();
   const queryClient = useQueryClient();
@@ -15,7 +25,7 @@ export function useActor() {
       const isAuthenticated = !!identity;
 
       if (!isAuthenticated) {
-        return await createActorWithConfig();
+        return await withTimeout(createActorWithConfig(), 10000);
       }
 
       const actorOptions = {
@@ -24,15 +34,15 @@ export function useActor() {
         },
       };
 
-      const actor = await createActorWithConfig(actorOptions);
+      const actor = await withTimeout(
+        createActorWithConfig(actorOptions),
+        10000,
+      );
       const adminToken = getSecretParameter("caffeineAdminToken") || "";
-
-      // Timeout to prevent _initializeAccessControlWithSecret from hanging indefinitely
-      await Promise.race([
+      await withTimeout(
         actor._initializeAccessControlWithSecret(adminToken),
-        new Promise<void>((resolve) => setTimeout(resolve, 10000)),
-      ]);
-
+        10000,
+      );
       return actor;
     },
     staleTime: Number.POSITIVE_INFINITY,
@@ -40,13 +50,18 @@ export function useActor() {
     retry: false,
   });
 
+  // When the actor changes, invalidate dependent queries
   useEffect(() => {
     if (actorQuery.data) {
       queryClient.invalidateQueries({
-        predicate: (query) => !query.queryKey.includes(ACTOR_QUERY_KEY),
+        predicate: (query) => {
+          return !query.queryKey.includes(ACTOR_QUERY_KEY);
+        },
       });
       queryClient.refetchQueries({
-        predicate: (query) => !query.queryKey.includes(ACTOR_QUERY_KEY),
+        predicate: (query) => {
+          return !query.queryKey.includes(ACTOR_QUERY_KEY);
+        },
       });
     }
   }, [actorQuery.data, queryClient]);

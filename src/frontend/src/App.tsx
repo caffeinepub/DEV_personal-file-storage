@@ -18,7 +18,7 @@ function AppContent() {
     queryFn: async (): Promise<UserProfile | null> => {
       if (!actor) throw new Error("Actor not available");
       const timeout = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("Profile fetch timed out")), 15000),
+        setTimeout(() => reject(new Error("Profile fetch timed out")), 10000),
       );
       return Promise.race([actor.getCallerUserProfile(), timeout]);
     },
@@ -26,8 +26,28 @@ function AppContent() {
     retry: false,
   });
 
-  // Show a brief spinner only while Internet Identity is initializing (reading local storage)
-  if (isInitializing) {
+  // Show spinner only while identity initializes or actor + profile are loading.
+  // If actor errors out, fall through to dashboard.
+  const isLoading =
+    isInitializing ||
+    (isAuthenticated && actorFetching && !profileQuery.isFetched) ||
+    (isAuthenticated &&
+      !!actor &&
+      profileQuery.isLoading &&
+      !profileQuery.isError);
+
+  const showProfileSetup =
+    isAuthenticated &&
+    !isLoading &&
+    profileQuery.isFetched &&
+    !profileQuery.isError &&
+    profileQuery.data === null;
+
+  if (!isAuthenticated && !isInitializing) {
+    return <LoginScreen />;
+  }
+
+  if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -38,23 +58,6 @@ function AppContent() {
   if (!isAuthenticated) {
     return <LoginScreen />;
   }
-
-  // While actor or profile are loading, show spinner — but cap it: if profile errored, skip through
-  const isProfileLoading =
-    (actorFetching || profileQuery.isLoading) && !profileQuery.isError;
-
-  if (isProfileLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  const showProfileSetup =
-    profileQuery.isFetched &&
-    !profileQuery.isError &&
-    profileQuery.data === null;
 
   if (showProfileSetup) {
     return <ProfileSetup />;
