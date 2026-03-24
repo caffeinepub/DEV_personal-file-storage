@@ -6,6 +6,16 @@ import { getSecretParameter } from "../utils/urlParams";
 import { useInternetIdentity } from "./useInternetIdentity";
 
 const ACTOR_QUERY_KEY = "actor";
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`Timed out after ${ms}ms`)), ms),
+    ),
+  ]);
+}
+
 export function useActor() {
   const { identity } = useInternetIdentity();
   const queryClient = useQueryClient();
@@ -15,8 +25,7 @@ export function useActor() {
       const isAuthenticated = !!identity;
 
       if (!isAuthenticated) {
-        // Return anonymous actor if not authenticated
-        return await createActorWithConfig();
+        return await withTimeout(createActorWithConfig(), 10000);
       }
 
       const actorOptions = {
@@ -25,15 +34,20 @@ export function useActor() {
         },
       };
 
-      const actor = await createActorWithConfig(actorOptions);
+      const actor = await withTimeout(
+        createActorWithConfig(actorOptions),
+        10000,
+      );
       const adminToken = getSecretParameter("caffeineAdminToken") || "";
-      await actor._initializeAccessControlWithSecret(adminToken);
+      await withTimeout(
+        actor._initializeAccessControlWithSecret(adminToken),
+        10000,
+      );
       return actor;
     },
-    // Only refetch when identity changes
     staleTime: Number.POSITIVE_INFINITY,
-    // This will cause the actor to be recreated when the identity changes
     enabled: true,
+    retry: false,
   });
 
   // When the actor changes, invalidate dependent queries

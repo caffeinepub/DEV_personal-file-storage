@@ -9,7 +9,7 @@ import { useActor } from "./hooks/useActor";
 import { useInternetIdentity } from "./hooks/useInternetIdentity";
 
 function AppContent() {
-  const { identity } = useInternetIdentity();
+  const { identity, isInitializing } = useInternetIdentity();
   const { actor, isFetching: actorFetching } = useActor();
   const isAuthenticated = !!identity;
 
@@ -18,7 +18,7 @@ function AppContent() {
     queryFn: async (): Promise<UserProfile | null> => {
       if (!actor) throw new Error("Actor not available");
       const timeout = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("Profile fetch timed out")), 15000),
+        setTimeout(() => reject(new Error("Profile fetch timed out")), 10000),
       );
       return Promise.race([actor.getCallerUserProfile(), timeout]);
     },
@@ -26,27 +26,37 @@ function AppContent() {
     retry: false,
   });
 
-  // Only block on initial load. If query errors or times out, show dashboard.
-  const isProfileLoading =
-    (actorFetching || profileQuery.isLoading) && !profileQuery.isError;
+  // Show spinner only while identity initializes or actor + profile are loading.
+  // If actor errors out, fall through to dashboard.
+  const isLoading =
+    isInitializing ||
+    (isAuthenticated && actorFetching && !profileQuery.isFetched) ||
+    (isAuthenticated &&
+      !!actor &&
+      profileQuery.isLoading &&
+      !profileQuery.isError);
 
   const showProfileSetup =
     isAuthenticated &&
-    !isProfileLoading &&
+    !isLoading &&
     profileQuery.isFetched &&
     !profileQuery.isError &&
     profileQuery.data === null;
 
-  if (!isAuthenticated) {
+  if (!isAuthenticated && !isInitializing) {
     return <LoginScreen />;
   }
 
-  if (isProfileLoading) {
+  if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
+  }
+
+  if (!isAuthenticated) {
+    return <LoginScreen />;
   }
 
   if (showProfileSetup) {
