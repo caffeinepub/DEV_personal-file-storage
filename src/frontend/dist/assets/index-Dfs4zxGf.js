@@ -44527,13 +44527,16 @@ function AppContent() {
     queryKey: ["currentUserProfile"],
     queryFn: async () => {
       if (!actor) throw new Error("Actor not available");
-      return actor.getCallerUserProfile();
+      const timeout2 = new Promise(
+        (_2, reject) => setTimeout(() => reject(new Error("Profile fetch timed out")), 15e3)
+      );
+      return Promise.race([actor.getCallerUserProfile(), timeout2]);
     },
     enabled: !!actor && !actorFetching && isAuthenticated,
     retry: false
   });
-  const isProfileLoading = actorFetching || profileQuery.isLoading;
-  const showProfileSetup = isAuthenticated && !isProfileLoading && profileQuery.isFetched && profileQuery.data === null;
+  const isProfileLoading = (actorFetching || profileQuery.isLoading) && !profileQuery.isError;
+  const showProfileSetup = isAuthenticated && !isProfileLoading && profileQuery.isFetched && !profileQuery.isError && profileQuery.data === null;
   if (!isAuthenticated) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(LoginScreen, {});
   }
