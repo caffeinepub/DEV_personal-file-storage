@@ -41040,25 +41040,23 @@ function useActor() {
       };
       const actor = await createActorWithConfig(actorOptions);
       const adminToken = getSecretParameter("caffeineAdminToken") || "";
-      await actor._initializeAccessControlWithSecret(adminToken);
+      await Promise.race([
+        actor._initializeAccessControlWithSecret(adminToken),
+        new Promise((resolve) => setTimeout(resolve, 1e4))
+      ]);
       return actor;
     },
-    // Only refetch when identity changes
     staleTime: Number.POSITIVE_INFINITY,
-    // This will cause the actor to be recreated when the identity changes
-    enabled: true
+    enabled: true,
+    retry: false
   });
   reactExports.useEffect(() => {
     if (actorQuery.data) {
       queryClient2.invalidateQueries({
-        predicate: (query) => {
-          return !query.queryKey.includes(ACTOR_QUERY_KEY);
-        }
+        predicate: (query) => !query.queryKey.includes(ACTOR_QUERY_KEY)
       });
       queryClient2.refetchQueries({
-        predicate: (query) => {
-          return !query.queryKey.includes(ACTOR_QUERY_KEY);
-        }
+        predicate: (query) => !query.queryKey.includes(ACTOR_QUERY_KEY)
       });
     }
   }, [actorQuery.data, queryClient2]);
@@ -44520,7 +44518,7 @@ function ProfileSetup() {
 }
 function AppContent() {
   var _a3;
-  const { identity } = useInternetIdentity();
+  const { identity, isInitializing } = useInternetIdentity();
   const { actor, isFetching: actorFetching } = useActor();
   const isAuthenticated = !!identity;
   const profileQuery = useQuery({
@@ -44535,14 +44533,17 @@ function AppContent() {
     enabled: !!actor && !actorFetching && isAuthenticated,
     retry: false
   });
-  const isProfileLoading = (actorFetching || profileQuery.isLoading) && !profileQuery.isError;
-  const showProfileSetup = isAuthenticated && !isProfileLoading && profileQuery.isFetched && !profileQuery.isError && profileQuery.data === null;
+  if (isInitializing) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "min-h-screen flex items-center justify-center bg-background", children: /* @__PURE__ */ jsxRuntimeExports.jsx(LoaderCircle, { className: "h-8 w-8 animate-spin text-primary" }) });
+  }
   if (!isAuthenticated) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(LoginScreen, {});
   }
+  const isProfileLoading = (actorFetching || profileQuery.isLoading) && !profileQuery.isError;
   if (isProfileLoading) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "min-h-screen flex items-center justify-center bg-background", children: /* @__PURE__ */ jsxRuntimeExports.jsx(LoaderCircle, { className: "h-8 w-8 animate-spin text-primary" }) });
   }
+  const showProfileSetup = profileQuery.isFetched && !profileQuery.isError && profileQuery.data === null;
   if (showProfileSetup) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(ProfileSetup, {});
   }

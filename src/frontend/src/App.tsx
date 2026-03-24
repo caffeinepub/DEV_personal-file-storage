@@ -9,7 +9,7 @@ import { useActor } from "./hooks/useActor";
 import { useInternetIdentity } from "./hooks/useInternetIdentity";
 
 function AppContent() {
-  const { identity } = useInternetIdentity();
+  const { identity, isInitializing } = useInternetIdentity();
   const { actor, isFetching: actorFetching } = useActor();
   const isAuthenticated = !!identity;
 
@@ -26,20 +26,22 @@ function AppContent() {
     retry: false,
   });
 
-  // Only block on initial load. If query errors or times out, show dashboard.
-  const isProfileLoading =
-    (actorFetching || profileQuery.isLoading) && !profileQuery.isError;
-
-  const showProfileSetup =
-    isAuthenticated &&
-    !isProfileLoading &&
-    profileQuery.isFetched &&
-    !profileQuery.isError &&
-    profileQuery.data === null;
+  // Show a brief spinner only while Internet Identity is initializing (reading local storage)
+  if (isInitializing) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
     return <LoginScreen />;
   }
+
+  // While actor or profile are loading, show spinner — but cap it: if profile errored, skip through
+  const isProfileLoading =
+    (actorFetching || profileQuery.isLoading) && !profileQuery.isError;
 
   if (isProfileLoading) {
     return (
@@ -48,6 +50,11 @@ function AppContent() {
       </div>
     );
   }
+
+  const showProfileSetup =
+    profileQuery.isFetched &&
+    !profileQuery.isError &&
+    profileQuery.data === null;
 
   if (showProfileSetup) {
     return <ProfileSetup />;
