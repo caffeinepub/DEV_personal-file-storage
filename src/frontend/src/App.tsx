@@ -1,6 +1,7 @@
 import { Toaster } from "@/components/ui/sonner";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
+import type { UserProfile } from "./backend";
 import Dashboard from "./components/Dashboard";
 import LoginScreen from "./components/LoginScreen";
 import ProfileSetup from "./components/ProfileSetup";
@@ -14,19 +15,26 @@ function AppContent() {
 
   const profileQuery = useQuery({
     queryKey: ["currentUserProfile"],
-    queryFn: async () => {
+    queryFn: async (): Promise<UserProfile | null> => {
       if (!actor) throw new Error("Actor not available");
-      return actor.getCallerUserProfile();
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Profile fetch timed out")), 15000),
+      );
+      return Promise.race([actor.getCallerUserProfile(), timeout]);
     },
     enabled: !!actor && !actorFetching && isAuthenticated,
     retry: false,
   });
 
-  const isProfileLoading = actorFetching || profileQuery.isLoading;
+  // Only block on initial load. If query errors or times out, show dashboard.
+  const isProfileLoading =
+    (actorFetching || profileQuery.isLoading) && !profileQuery.isError;
+
   const showProfileSetup =
     isAuthenticated &&
     !isProfileLoading &&
     profileQuery.isFetched &&
+    !profileQuery.isError &&
     profileQuery.data === null;
 
   if (!isAuthenticated) {
